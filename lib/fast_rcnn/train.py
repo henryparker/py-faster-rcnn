@@ -16,6 +16,8 @@ import os
 
 from caffe.proto import caffe_pb2
 import google.protobuf as pb2
+import google.protobuf.text_format
+import json
 
 class SolverWrapper(object):
     """A simple wrapper around Caffe's solver.
@@ -95,11 +97,32 @@ class SolverWrapper(object):
         last_snapshot_iter = -1
         timer = Timer()
         model_paths = []
+        loss_history = []
         while self.solver.iter < max_iters:
             # Make one SGD update
             timer.tic()
             self.solver.step(1)
             timer.toc()
+
+            rpn_cls = float(self.solver.net.blobs['rpn_cls_loss'].data)
+            rpn_bbox = float(self.solver.net.blobs['rpn_loss_bbox'].data)
+            rcnn_cls = float(self.solver.net.blobs['loss_cls'].data)
+            rcnn_bbox = float(self.solver.net.blobs['loss_bbox'].data)
+
+            total_loss = rpn_cls + rpn_bbox + rcnn_cls + rcnn_bbox
+
+            loss_history.append({
+                'iter': self.solver.iter,
+                'total_loss': total_loss,
+                'rpn_cls': rpn_cls,
+                'rpn_bbox': rpn_bbox,
+                'rcnn_cls': rcnn_cls,
+                'rcnn_bbox': rcnn_bbox
+            })
+            if self.solver.iter % 100 == 0:
+                with open('training_loss.json', 'w') as f:
+                    json.dump(loss_history, f)
+            
             if self.solver.iter % (10 * self.solver_param.display) == 0:
                 print 'speed: {:.3f}s / iter'.format(timer.average_time)
 
